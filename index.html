@@ -1,0 +1,361 @@
+
+
+<!DOCTYPE html>
+
+<html lang="vi">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Xuân Nhi Gems</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+
+    *{box-sizing:border-box}
+
+    body{margin:0;background:#fff7fb;color:#44333e;font-family:Arial,sans-serif}
+
+    header{background:#24151f;color:#f7b6d5;padding:22px 18px}
+
+    header h1{margin:0;font-size:23px}
+
+    header p{margin:7px 0 0;color:#f5d9e7;font-size:13px}
+
+    main{max-width:900px;margin:auto;padding:18px}
+
+    .panel{background:white;border:1px solid #f1dce7;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 3px 12px #54233b0b}
+
+    h2{font-size:18px;margin:0 0 14px;color:#9d4772}
+
+    input,button{width:100%;padding:13px;border-radius:10px;font-size:15px;margin:6px 0}
+
+    input{border:1px solid #e8cbd9;background:#fff}
+
+    button{border:0;background:#bd6592;color:white;font-weight:bold}
+
+    button.secondary{background:#f3e3ec;color:#8b4269}
+
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+
+    .stat{background:#fff1f7;border-radius:12px;padding:15px}
+
+    .stat strong{display:block;font-size:25px;color:#a64f7c}
+
+    .stat span{font-size:13px;color:#76596a}
+
+    .tabs{display:flex;gap:8px;overflow:auto;margin:12px 0}
+
+    .tabs button{min-width:95px;margin:0;padding:11px 14px}
+
+    .tabs button.active{background:#75405e;color:white}
+
+    .item{padding:12px 0;border-bottom:1px solid #f3e5ec}
+
+    .item:last-child{border:0}
+
+    .muted{color:#927d89;font-size:13px}
+
+    .hidden{display:none}
+
+    #message{font-size:14px;color:#a04470;white-space:pre-wrap}
+
+    @media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+  </style>
+
+</head>
+
+<body>
+
+<header>
+
+  <h1>♡ Xuân Nhi Gems</h1>
+
+  <p>Hệ thống quản lý cửa hàng trang sức thiên nhiên</p>
+
+</header>
+
+<main>
+
+  <section id="login" class="panel">
+
+    <h2>Đăng nhập hệ thống</h2>
+
+    <input id="email" type="email" placeholder="Email đăng nhập">
+
+    <input id="password" type="password" placeholder="Mật khẩu">
+
+    <button id="loginBtn">Đăng nhập</button>
+
+    <p class="muted">Sử dụng tài khoản Supabase đang quản lý dữ liệu cửa hàng.</p>
+
+    <p id="loginMessage"></p>
+
+  </section>
+
+  <section id="app" class="hidden">
+
+    <div class="panel">
+
+      <div id="welcome" class="muted"></div>
+
+      <button class="secondary" id="refreshBtn">↻ Làm mới dữ liệu</button>
+
+      <button class="secondary" id="logoutBtn">Đăng xuất</button>
+
+    </div>
+
+    <div class="grid">
+
+      <div class="stat"><strong id="productsCount">—</strong><span>Sản phẩm</span></div>
+
+      <div class="stat"><strong id="ordersCount">—</strong><span>Đơn hàng</span></div>
+
+      <div class="stat"><strong id="customersCount">—</strong><span>Khách hàng</span></div>
+
+      <div class="stat"><strong id="lotsCount">—</strong><span>Lô nhập</span></div>
+
+    </div>
+
+    <div class="tabs">
+
+      <button class="active" data-tab="products">Sản phẩm</button>
+
+      <button data-tab="orders">Đơn hàng</button>
+
+      <button data-tab="customers">Khách hàng</button>
+
+    </div>
+
+    <section class="panel">
+
+      <h2 id="listTitle">Sản phẩm</h2>
+
+      <div id="list" class="muted">Đang tải dữ liệu...</div>
+
+    </section>
+
+    <p id="message"></p>
+
+  </section>
+
+</main>
+
+<script>
+
+const SUPABASE_URL = "https://ifwnvocaaimzjikphfzb.supabase.co";
+
+const SUPABASE_KEY = "sb_publishable_1pf2OOQQCafLloJqOU2-kQ_DStahX4Y";
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentTab = "products";
+
+let cache = {products:[],orders:[],customers:[]};
+
+const $ = id => document.getElementById(id);
+
+const money = n => Number(n || 0).toLocaleString("vi-VN") + "đ";
+
+const safe = value => String(value ?? "").replace(/[&<>"']/g, c =>
+
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])
+
+);
+
+function showMessage(message){ $("message").textContent = message; }
+
+async function checkSession(){
+
+  const {data,error} = await db.auth.getSession();
+
+  if(error){ $("loginMessage").textContent = error.message; return; }
+
+  if(data.session) showApp(data.session.user);
+
+}
+
+function showApp(user){
+
+  $("login").classList.add("hidden");
+
+  $("app").classList.remove("hidden");
+
+  $("welcome").textContent = "Đang đăng nhập: " + user.email;
+
+  loadData();
+
+}
+
+async function signIn(){
+
+  $("loginMessage").textContent = "Đang đăng nhập...";
+
+  const email = $("email").value.trim();
+
+  const password = $("password").value;
+
+  const {data,error} = await db.auth.signInWithPassword({email,password});
+
+  if(error){ $("loginMessage").textContent = "Không đăng nhập được: " + error.message; return; }
+
+  showApp(data.user);
+
+}
+
+async function loadTable(table){
+
+  const {data,error} = await db.from(table).select("*").limit(200);
+
+  if(error) throw new Error(table + ": " + error.message);
+
+  return data || [];
+
+}
+
+async function loadData(){
+
+  showMessage("Đang tải dữ liệu cửa hàng...");
+
+  try{
+
+    const [products,orders,customers,lots] = await Promise.all([
+
+      loadTable("products"),
+
+      loadTable("orders"),
+
+      loadTable("customers"),
+
+      loadTable("inventory_lots")
+
+    ]);
+
+    cache = {products,orders,customers};
+
+    $("productsCount").textContent = products.length;
+
+    $("ordersCount").textContent = orders.length;
+
+    $("customersCount").textContent = customers.length;
+
+    $("lotsCount").textContent = lots.length;
+
+    renderList();
+
+    showMessage("Đã tải dữ liệu. Website đang ở chế độ xem an toàn.");
+
+  }catch(error){
+
+    showMessage("Chưa tải được dữ liệu: " + error.message +
+
+      "\nBạn kiểm tra lại tài khoản đăng nhập và quyền truy cập nhé.");
+
+  }
+
+}
+
+function renderList(){
+
+  const list = $("list");
+
+  const title = {products:"Sản phẩm",orders:"Đơn hàng",customers:"Khách hàng"};
+
+  $("listTitle").textContent = title[currentTab];
+
+  const rows = cache[currentTab] || [];
+
+  if(!rows.length){
+
+    list.textContent = "Chưa có dữ liệu hiển thị.";
+
+    return;
+
+  }
+
+  if(currentTab === "products"){
+
+    list.innerHTML = rows.map(p => `
+
+      <div class="item">
+
+        <b>${safe(p.name)}</b>
+
+        <div class="muted">Mã: ${safe(p.sku || p.id || "—")} · Tồn: ${safe(p.qty ?? 0)}</div>
+
+        <div>Giá bán: <b>${money(p.price)}</b></div>
+
+      </div>`).join("");
+
+  }else if(currentTab === "orders"){
+
+    list.innerHTML = rows.map(o => `
+
+      <div class="item">
+
+        <b>${safe(o.customer || "Khách hàng")}</b>
+
+        <div class="muted">Mã đơn: ${safe(o.id)} · ${safe(o.created_at || "")}</div>
+
+        <div>Thành tiền: <b>${money(o.total)}</b></div>
+
+        <div class="muted">Trạng thái: ${safe(o.status || "—")}</div>
+
+      </div>`).join("");
+
+  }else{
+
+    list.innerHTML = rows.map(c => `
+
+      <div class="item">
+
+        <b>${safe(c.name || c.full_name || c.phone || "Khách hàng")}</b>
+
+        <div class="muted">${safe(c.phone || "")}</div>
+
+      </div>`).join("");
+
+  }
+
+}
+
+$("loginBtn").addEventListener("click",signIn);
+
+$("refreshBtn").addEventListener("click",loadData);
+
+$("logoutBtn").addEventListener("click",async()=>{
+
+  await db.auth.signOut();
+
+  location.reload();
+
+});
+
+document.querySelectorAll("[data-tab]").forEach(button=>{
+
+  button.addEventListener("click",()=>{
+
+    document.querySelectorAll("[data-tab]").forEach(b=>b.classList.remove("active"));
+
+    button.classList.add("active");
+
+    currentTab = button.dataset.tab;
+
+    renderList();
+
+  });
+
+});
+
+checkSession();
+
+</script>
+
+</body>
+
+</html>
